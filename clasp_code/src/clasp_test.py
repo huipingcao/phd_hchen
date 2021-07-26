@@ -71,7 +71,7 @@ if __name__ == '__main__':
     df_comb = load_combined_dataset()
 
     for idx, (name, window_size, cps, ts) in df_comb.iterrows():
-        if idx <2 :
+        if idx <1 :
             runtime = time.process_time()
             _, found_cps, _ = extract_clasp_cps(ts, window_size, len(cps))
             runtime = np.round(time.process_time() - runtime, 6)

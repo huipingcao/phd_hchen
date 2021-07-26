@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/TCPDBench" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/TCPDBench/TCPD" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/offline_to_onlineTSS_clasp_code/datasets/BOCPD2020/TCPDBench" vcs="Git" />
+  </component>
+</project>

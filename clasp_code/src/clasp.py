@@ -9,8 +9,8 @@ from numba import njit
 
 
 # the sliding windows for a time series and a window size
-def sliding_window(ts, window):
-    shape = ts.shape[:-1] + (ts.shape[-1] - window + 1, window)
+def sliding_window(ts, window_size):
+    shape = ts.shape[:-1] + (ts.shape[-1] - window_size + 1, window_size)
     strides = ts.strides + (ts.strides[-1],)
     return np.lib.stride_tricks.as_strided(ts, shape=shape, strides=strides)
 
@@ -64,6 +64,26 @@ def compute_distances_iterative(TS, m, k):
             dot_rolled = dot_first
         # O(1) further operations
         else:
+            # np.roll(array, 1))
+            # Original array :
+            #  [[ 0  1  2  3]
+            #  [ 4  5  6  7]
+            #  [ 8  9 10 11]]
+            #
+            # Rolling with 1 shift :
+            #  [[11  0  1  2]
+            #  [ 3  4  5  6]
+            #  [ 7  8  9 10]]
+            #
+            # Rolling with 5 shift :
+            #  [[ 7  8  9 10]
+            #  [11  0  1  2]
+            #  [ 3  4  5  6]]
+            #
+            # Rolling with 2 shift with 0 axis :
+            #  [[ 4  5  6  7]
+            #  [ 8  9 10 11]
+            #  [ 0  1  2  3]]
             dot_rolled = np.roll(dot_prev, 1) + TS[order + m - 1] * TS[m - 1:l + m] - TS[order - 1] * np.roll(TS[:l], 1)
             dot_rolled[0] = dot_first[order]
 
@@ -88,7 +108,12 @@ def compute_distances_iterative(TS, m, k):
 @njit(fastmath=True, cache=True)
 def _calc_knn_labels(knn_mask, split_idx, window_size):
     k_neighbours, n_timepoints = knn_mask.shape
-
+    # a = np.array([[1, 2], [3, 4]])
+    # b = np.array([[5, 6]])
+    # np.concatenate((a, b), axis=0)
+    # array([[1, 2],
+    #        [3, 4],
+    #        [5, 6]])
     # create hypothetical labels
     y_true = np.concatenate((
         np.zeros(split_idx, dtype=np.int64),
@@ -114,7 +139,7 @@ def _calc_knn_labels(knn_mask, split_idx, window_size):
     return y_true, y_pred
 
 
-# roc-auc score calculation
+# roc-auc score calculation  ???
 @njit(fastmath=True, cache=True)
 def _roc_auc_score(y_score, y_true):
     # make y_true a boolean vector
@@ -129,13 +154,35 @@ def _roc_auc_score(y_score, y_true):
     # y_score typically has many tied values. Here we extract
     # the indices associated with the distinct values. We also
     # concatenate a value for the end of the curve.
+    # .diff()
+    # Input array  :  [[1 2 3 5]
+    #                  [4 6 7 9]]
+    # Difference with axis 0 :  [[3 4 4 4]]
+    # Difference with axis 1 :  [[1 1 2]
+    #                           [2 1 2]]
+
+    # print(a)
+    # [[1 2 3]
+    #  [4 5 6]]
+    # print ('Indices of elements <4')
+    # b = np.where(a<4)
+    # print(b)
+    # (array([0, 0, 0], dtype=int64), array([0, 1, 2], dtype=int64))
+
+    # print("Elements which are <4")
+    # print(a[b])
+    # array([1, 2, 3])
     distinct_value_indices = np.where(np.diff(y_score))[0]
+
     threshold_idxs = np.concatenate((
         distinct_value_indices,
         np.array([y_true.size - 1])
     ))
 
     # accumulate the true positives with decreasing threshold
+    # Input array :  [[2 4 6]
+    #                [1 3 5]]
+    # cumulative sum of array elements:  [ 2  6 12 13 16 21]
     tps = np.cumsum(y_true)[threshold_idxs]
     fps = 1 + threshold_idxs - tps
 
@@ -168,15 +215,21 @@ def _calc_profile(window_size, knn_mask, score, offset):
     n_timepoints = knn_mask.shape[1]
     profile = np.full(shape=n_timepoints, fill_value=np.nan, dtype=np.float64)
 
+    print('offset:', offset)
     for split_idx in range(offset, n_timepoints - offset):
         y_true, y_pred = _calc_knn_labels(knn_mask, split_idx, window_size)
 
         try:
             profile[split_idx] = score(y_true, y_pred)
+            #print('y_true:', y_true)
+            #print('y_pred:', y_pred)
+            #print('split_idx:', split_idx)
+            #print('profile[split_idx]:', profile[split_idx])
+
         except:
             # roc_auc_score fails if y_true only has one class, can (and does) happen in principal
             pass
-
+    print('profile:', profile)
     return profile
 
 
@@ -189,6 +242,7 @@ def calc_clasp(time_series, window_size, k_neighbours=3, score=_roc_auc_score, i
 
     profile = _calc_profile(window_size, knn_mask, score, offset)
 
+    # .interpolate(): Filling in NaN in a Series by padding, but filling at most two consecutive NaN at a time.
     if interpolate is True: profile = pd.Series(profile).interpolate(limit_direction='both').to_numpy()
     return profile, knn_mask
 
@@ -212,10 +266,10 @@ def extract_clasp_cps(time_series, window_size, n_change_points=None, offset=.05
 
     # compute global clasp
     profile, knn_mask = calc_clasp(time_series=time_series, window_size=window_size)
-    print('profile: ', profile)
-    print('knn_mask: ', knn_mask)
+    #print('profile: ', profile)
+    #print('knn_mask: ', knn_mask)
     queue.put((-np.max(profile), (np.arange(time_series.shape[0]).tolist(), np.argmax(profile))))
-    print('queue: ', queue)
+    #print('queue: ', queue)
 
     change_points = []
     scores = []
