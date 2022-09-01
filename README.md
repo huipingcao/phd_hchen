@@ -1,2 +1,2 @@
 # phd_hchen
-Huiying's materials for her PhD dissertation
+Huiying's playground for her PhD dissertation
